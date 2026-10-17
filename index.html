@@ -1,0 +1,423 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="McGill 3">
+  <meta name="theme-color" content="#020617">
+  <title>McGill Big 3 Timer</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    @keyframes pulse-ring {
+      0% { transform: scale(0.98); opacity: 0.85; }
+      50% { transform: scale(1.02); opacity: 1; }
+      100% { transform: scale(0.98); opacity: 0.85; }
+    }
+    .pulsing { animation: pulse-ring 1.5s infinite ease-in-out; }
+    .phase-hold { border-color: #10b981; color: #10b981; background: rgba(16, 185, 129, 0.12); }
+    .phase-rest { border-color: #f59e0b; color: #f59e0b; background: rgba(245, 158, 11, 0.12); }
+    .phase-setrest { border-color: #3b82f6; color: #3b82f6; background: rgba(59, 130, 246, 0.12); }
+    .phase-prep { border-color: #a855f7; color: #a855f7; background: rgba(168, 85, 247, 0.12); }
+    .phase-idle { border-color: #334155; color: #94a3b8; background: rgba(15, 23, 42, 0.6); }
+    .phase-done { border-color: #10b981; color: #10b981; background: rgba(16, 185, 129, 0.2); }
+  </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen flex items-center justify-center p-4 antialiased select-none font-sans">
+  
+  <main class="w-full max-w-sm bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-2xl flex flex-col gap-4">
+    
+    <!-- Top Header -->
+    <header class="flex items-center justify-between border-b border-slate-800 pb-3">
+      <div>
+        <h1 class="font-extrabold text-lg text-slate-50 flex items-center gap-1.5">
+          <span>⏱️</span> McGill Big 3
+        </h1>
+        <p class="text-xs text-slate-400">10s hold • 3s rest • 6 reps • 45s set</p>
+      </div>
+      <div class="flex items-center gap-1.5">
+        <button id="voiceBtn" onclick="toggleVoice()" title="Toggle voice cues"
+          class="px-2.5 py-1 rounded-xl border border-slate-700 bg-slate-800 text-xs hover:bg-slate-700 transition">
+          <span id="voiceIcon">🗣️ On</span>
+        </button>
+        <button id="soundBtn" onclick="toggleSound()" title="Toggle countdown beeps"
+          class="px-2.5 py-1 rounded-xl border border-slate-700 bg-slate-800 text-xs hover:bg-slate-700 transition">
+          <span id="soundIcon">🔔 On</span>
+        </button>
+      </div>
+    </header>
+
+    <!-- Workout Status Bar -->
+    <div class="flex items-center justify-between text-xs font-semibold px-1 text-slate-300">
+      <div class="flex items-center gap-1.5 bg-slate-800 px-3 py-1 rounded-full border border-slate-700">
+        <span class="text-slate-400">Set</span>
+        <span id="currentSet" class="font-mono font-bold text-sm text-emerald-400">1</span>
+        <span class="text-slate-500">/</span>
+        <span id="totalSets" class="font-mono text-slate-400">3</span>
+      </div>
+      <div class="flex items-center gap-1.5 bg-slate-800 px-3 py-1 rounded-full border border-slate-700">
+        <span class="text-slate-400 mr-1">Reps:</span>
+        <div id="repPills" class="flex gap-1.5 items-center"></div>
+      </div>
+    </div>
+
+    <!-- Main Center Display -->
+    <section id="timerCard" class="phase-idle border-2 rounded-2xl p-7 flex flex-col items-center justify-center min-h-[220px] transition-all duration-300">
+      <span id="phaseBadge" class="text-xs tracking-wider uppercase font-extrabold px-3 py-1 rounded-full border border-current mb-2">
+        READY TO START
+      </span>
+      <div class="flex items-baseline justify-center">
+        <span id="countdownNumber" class="text-7xl font-black font-mono tracking-tight leading-none my-1 text-white drop-shadow">
+          10
+        </span>
+        <span class="text-base font-semibold ml-1 text-slate-400">s</span>
+      </div>
+      <p id="subStatus" class="text-xs font-medium text-slate-300 mt-2 text-center">
+        Rep 1 of 6 • 10s isometric hold
+      </p>
+    </section>
+
+    <!-- Progress Bar -->
+    <div class="w-full bg-slate-800 h-2 rounded-full overflow-hidden">
+      <div id="progressBar" class="bg-emerald-500 h-full transition-all duration-300" style="width: 0%"></div>
+    </div>
+
+    <!-- Main Action Buttons -->
+    <div class="grid grid-cols-4 gap-2 pt-1">
+      <button id="startPauseBtn" onclick="togglePlay()"
+        class="col-span-2 py-3.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white font-bold text-sm shadow-lg flex items-center justify-center gap-2 transition-all">
+        <span id="playIcon">▶</span>
+        <span id="playText">START</span>
+      </button>
+      <button onclick="skipPhase()" title="Skip to next phase"
+        class="py-3.5 px-3 rounded-xl border border-slate-700 bg-slate-800 hover:bg-slate-700 active:scale-95 text-xs font-semibold text-slate-200 transition-all">
+        ⏭️ Skip
+      </button>
+      <button onclick="resetTimer()" title="Reset workout"
+        class="py-3.5 px-3 rounded-xl border border-slate-700 bg-slate-800 hover:bg-slate-700 active:scale-95 text-xs font-semibold text-slate-200 transition-all">
+        🔄 Reset
+      </button>
+    </div>
+
+    <!-- Collapsible Settings -->
+    <footer class="border-t border-slate-800 pt-3 text-xs">
+      <details class="group cursor-pointer">
+        <summary class="flex justify-between items-center text-slate-400 hover:text-slate-200 font-medium list-none py-1 transition-colors">
+          <span class="flex items-center gap-1.5">⚙️ Adjust Parameters & Sets</span>
+          <span class="text-xs transition-transform group-open:rotate-180">▼</span>
+        </summary>
+        <div class="grid grid-cols-2 gap-2.5 mt-3 pt-3 border-t border-slate-800/80">
+          <div>
+            <label class="block text-slate-400 mb-1">Hold Time (sec)</label>
+            <input type="number" id="cfgHold" value="10" min="1" max="120"
+              class="w-full bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1.5 text-center font-mono font-bold text-slate-100"
+              onchange="updateConfig()">
+          </div>
+          <div>
+            <label class="block text-slate-400 mb-1">Rep Rest (sec)</label>
+            <input type="number" id="cfgRest" value="3" min="1" max="60"
+              class="w-full bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1.5 text-center font-mono font-bold text-slate-100"
+              onchange="updateConfig()">
+          </div>
+          <div>
+            <label class="block text-slate-400 mb-1">Reps per Set</label>
+            <input type="number" id="cfgReps" value="6" min="1" max="30"
+              class="w-full bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1.5 text-center font-mono font-bold text-slate-100"
+              onchange="updateConfig()">
+          </div>
+          <div>
+            <label class="block text-slate-400 mb-1">Set Rest (sec)</label>
+            <input type="number" id="cfgSetRest" value="45" min="5" max="300"
+              class="w-full bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1.5 text-center font-mono font-bold text-slate-100"
+              onchange="updateConfig()">
+          </div>
+          <div class="col-span-2 flex items-center justify-between pt-1">
+            <span class="text-slate-400 font-medium">Total Sets:</span>
+            <div class="flex items-center gap-2">
+              <button onclick="adjustSets(-1)" class="w-8 h-8 rounded-lg border border-slate-700 bg-slate-800 font-bold hover:bg-slate-700 transition">-</button>
+              <span id="cfgTotalSetsVal" class="font-bold font-mono text-base px-2 text-emerald-400">3</span>
+              <button onclick="adjustSets(1)" class="w-8 h-8 rounded-lg border border-slate-700 bg-slate-800 font-bold hover:bg-slate-700 transition">+</button>
+            </div>
+          </div>
+        </div>
+      </details>
+    </footer>
+
+  </main>
+
+  <script>
+    const config = {
+      prep: 3,
+      hold: 10,
+      rest: 3,
+      reps: 6,
+      setRest: 45,
+      totalSets: 3
+    };
+
+    const Phases = {
+      IDLE: 'IDLE',
+      PREP: 'PREP',
+      HOLD: 'HOLD',
+      REP_REST: 'REP_REST',
+      SET_REST: 'SET_REST',
+      COMPLETE: 'COMPLETE'
+    };
+
+    let state = {
+      phase: Phases.IDLE,
+      set: 1,
+      rep: 1,
+      rem: config.hold,
+      total: config.hold,
+      running: false,
+      interval: null
+    };
+
+    let sound = true;
+    let voice = true;
+    let audioCtx = null;
+    let wakeLock = null;
+
+    async function requestWakeLock() {
+      try {
+        if ('wakeLock' in navigator) {
+          wakeLock = await navigator.wakeLock.request('screen');
+        }
+      } catch (e) {}
+    }
+
+    function getAudioCtx() {
+      if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      if (audioCtx.state === 'suspended') audioCtx.resume();
+      return audioCtx;
+    }
+
+    function beep(freq = 600, duration = 0.12) {
+      if (!sound) return;
+      try {
+        const ctx = getAudioCtx();
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.frequency.setValueAtTime(freq, ctx.currentTime);
+        gain.gain.setValueAtTime(0.2, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + duration);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start();
+        osc.stop(ctx.currentTime + duration);
+      } catch(e){}
+    }
+
+    function speak(text) {
+      if (!voice || !window.speechSynthesis) return;
+      try {
+        window.speechSynthesis.cancel();
+        const u = new SpeechSynthesisUtterance(text);
+        u.rate = 1.15;
+        window.speechSynthesis.speak(u);
+      } catch(e){}
+    }
+
+    function toggleSound() {
+      sound = !sound;
+      document.getElementById('soundIcon').innerText = sound ? '🔔 On' : '🔕 Off';
+      if (sound) beep(800);
+    }
+
+    function toggleVoice() {
+      voice = !voice;
+      document.getElementById('voiceIcon').innerText = voice ? '🗣️ On' : '🔇 Off';
+      if (voice) speak('Voice on');
+    }
+
+    function updateConfig() {
+      config.hold = Math.max(1, parseInt(document.getElementById('cfgHold').value) || 10);
+      config.rest = Math.max(1, parseInt(document.getElementById('cfgRest').value) || 3);
+      config.reps = Math.max(1, parseInt(document.getElementById('cfgReps').value) || 6);
+      config.setRest = Math.max(1, parseInt(document.getElementById('cfgSetRest').value) || 45);
+      renderPills();
+      if (state.phase === Phases.IDLE) {
+        state.rem = config.hold;
+        state.total = config.hold;
+        render();
+      }
+    }
+
+    function adjustSets(delta) {
+      config.totalSets = Math.max(1, Math.min(20, config.totalSets + delta));
+      document.getElementById('cfgTotalSetsVal').innerText = config.totalSets;
+      document.getElementById('totalSets').innerText = config.totalSets;
+    }
+
+    function renderPills() {
+      const c = document.getElementById('repPills');
+      c.innerHTML = '';
+      for (let i = 1; i <= config.reps; i++) {
+        const d = document.createElement('div');
+        d.className = 'w-2.5 h-2.5 rounded-full transition-all duration-200 ' + 
+          (state.phase === Phases.COMPLETE || i < state.rep
+            ? 'bg-emerald-500 shadow-sm shadow-emerald-500/50'
+            : (i === state.rep && state.phase !== Phases.IDLE
+                ? 'bg-emerald-400 ring-2 ring-emerald-400/60 scale-125'
+                : 'bg-slate-700'));
+        c.appendChild(d);
+      }
+    }
+
+    function render() {
+      const card = document.getElementById('timerCard');
+      const badge = document.getElementById('phaseBadge');
+      const num = document.getElementById('countdownNumber');
+      const sub = document.getElementById('subStatus');
+      const pBtn = document.getElementById('startPauseBtn');
+      const pBar = document.getElementById('progressBar');
+
+      document.getElementById('currentSet').innerText = state.set;
+      document.getElementById('totalSets').innerText = config.totalSets;
+      num.innerText = state.rem;
+      renderPills();
+
+      const pct = state.total > 0 ? Math.round(((state.total - state.rem) / state.total) * 100) : 0;
+      pBar.style.width = pct + '%';
+
+      card.className = 'border-2 rounded-2xl p-7 flex flex-col items-center justify-center min-h-[220px] transition-all duration-300 ';
+      if (state.phase === Phases.IDLE) {
+        card.className += 'phase-idle';
+        badge.innerText = 'READY TO START';
+        sub.innerText = `Press Start (${config.prep}s prep)`;
+        num.innerText = config.hold;
+        pBar.className = 'bg-emerald-500 h-full transition-all duration-300';
+      } else if (state.phase === Phases.PREP) {
+        card.className += 'phase-prep pulsing';
+        badge.innerText = 'GET READY';
+        sub.innerText = `Set ${state.set} starting in ${state.rem}s...`;
+        pBar.className = 'bg-purple-500 h-full transition-all duration-300';
+      } else if (state.phase === Phases.HOLD) {
+        card.className += 'phase-hold pulsing';
+        badge.innerText = '💪 HOLD';
+        sub.innerText = `Rep ${state.rep} of ${config.reps} • Hold steady!`;
+        pBar.className = 'bg-emerald-500 h-full transition-all duration-300';
+      } else if (state.phase === Phases.REP_REST) {
+        card.className += 'phase-rest';
+        badge.innerText = '⏸️ REST';
+        sub.innerText = `3s rest • Next rep incoming!`;
+        pBar.className = 'bg-amber-500 h-full transition-all duration-300';
+      } else if (state.phase === Phases.SET_REST) {
+        card.className += 'phase-setrest';
+        badge.innerText = '🛋️ SET REST';
+        sub.innerText = `Set ${state.set} complete! Rest 45 seconds.`;
+        pBar.className = 'bg-blue-500 h-full transition-all duration-300';
+      } else if (state.phase === Phases.COMPLETE) {
+        card.className += 'phase-done';
+        badge.innerText = '🎉 WORKOUT COMPLETE';
+        num.innerText = 'DONE';
+        sub.innerText = `All sets finished! Great job!`;
+        pBar.className = 'bg-emerald-500 h-full transition-all duration-300';
+      }
+
+      document.getElementById('playIcon').innerText = state.running ? '⏸' : '▶';
+      document.getElementById('playText').innerText = state.running ? 'PAUSE' : (state.phase === Phases.IDLE ? 'START' : 'RESUME');
+      pBtn.className = 'col-span-2 py-3.5 px-4 rounded-xl font-bold text-sm shadow-lg flex items-center justify-center gap-2 transition-all ' + 
+        (state.running ? 'bg-amber-600 hover:bg-amber-500 active:scale-95 text-white' : 'bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white');
+    }
+
+    function togglePlay() {
+      getAudioCtx();
+      requestWakeLock();
+      state.running ? pauseTimer() : startTimer();
+    }
+
+    function startTimer() {
+      if (state.phase === Phases.COMPLETE) resetTimer();
+      if (state.phase === Phases.IDLE) {
+        switchPhase(Phases.PREP, config.prep);
+        speak('Get ready');
+      }
+      state.running = true;
+      clearInterval(state.interval);
+      state.interval = setInterval(tick, 1000);
+      render();
+    }
+
+    function pauseTimer() {
+      state.running = false;
+      clearInterval(state.interval);
+      render();
+    }
+
+    function resetTimer() {
+      pauseTimer();
+      state.phase = Phases.IDLE;
+      state.set = 1;
+      state.rep = 1;
+      state.rem = config.hold;
+      state.total = config.hold;
+      render();
+    }
+
+    function switchPhase(p, dur) {
+      state.phase = p;
+      state.rem = dur;
+      state.total = dur;
+      render();
+    }
+
+    function tick() {
+      if (state.rem > 1) {
+        state.rem--;
+        if (state.rem <= 3) beep(440, 0.08);
+        render();
+      } else {
+        advance();
+      }
+    }
+
+    function advance() {
+      if (state.phase === Phases.PREP) {
+        beep(880, 0.3);
+        speak('Hold');
+        switchPhase(Phases.HOLD, config.hold);
+      } else if (state.phase === Phases.HOLD) {
+        if (state.rep < config.reps) {
+          beep(520, 0.2);
+          speak('Rest');
+          switchPhase(Phases.REP_REST, config.rest);
+        } else if (state.set < config.totalSets) {
+          beep(700, 0.4);
+          speak(`Set ${state.set} complete. Rest 45 seconds.`);
+          switchPhase(Phases.SET_REST, config.setRest);
+        } else {
+          beep(880, 0.5);
+          speak('Workout complete! Great job!');
+          state.phase = Phases.COMPLETE;
+          state.running = false;
+          clearInterval(state.interval);
+          render();
+        }
+      } else if (state.phase === Phases.REP_REST) {
+        state.rep++;
+        beep(880, 0.3);
+        speak(`Hold rep ${state.rep}`);
+        switchPhase(Phases.HOLD, config.hold);
+      } else if (state.phase === Phases.SET_REST) {
+        state.set++;
+        state.rep = 1;
+        beep(880, 0.3);
+        speak(`Set ${state.set}. Hold`);
+        switchPhase(Phases.HOLD, config.hold);
+      }
+    }
+
+    function skipPhase() {
+      if (state.phase !== Phases.IDLE && state.phase !== Phases.COMPLETE) {
+        getAudioCtx();
+        advance();
+      }
+    }
+
+    render();
+  </script>
+</body>
+</html>
